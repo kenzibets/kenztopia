@@ -1205,114 +1205,143 @@ window.addEventListener('beforeunload', ()=>{
   playlist.forEach(p=>{ if(p.url && p.file) URL.revokeObjectURL(p.url); });
 });
 
-/* Redirect-only-on-DevTools script
-   - Redirects to REDIRECT_URL only when devtools is likely opened.
-   - Does NOT redirect on normal clicks/right-clicks.
+/* DevTools key-only warning (no spam)
+   - Shows one neon-green overlay ONLY when user presses devtools key combos.
+   - Ignores repeats and won't re-show until dismissed.
 */
-(function antiInspectDevtoolsOnly(){
-  const REDIRECT_URL = 'https://www.indeed.com/';
+(function antiInspectKeyOnly(){
   const THROTTLE_MS = 800;
   let lastAction = 0;
+  let active = false;
 
   function now(){ return Date.now(); }
-  function redirectNow(){
+
+  function showNeonMessage(){
+    if (active) return;
+    active = true;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'anti-inspect-overlay';
+    overlay.setAttribute('role','alert');
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      inset: '0',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: '2147483647',
+      background: 'rgba(0,0,0,0.85)',
+      color: '#39FF14',
+      textAlign: 'center',
+      padding: '20px',
+      boxSizing: 'border-box',
+      WebkitUserSelect: 'none',
+      userSelect: 'none',
+    });
+
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+      maxWidth: '1400px',
+      width: 'calc(100% - 40px)',
+      fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial',
+      fontSize: 'clamp(18px, 4vw, 44px)',
+      lineHeight: '1.1',
+      fontWeight: '700',
+      letterSpacing: '0.5px',
+      textShadow: `
+        0 0 6px rgba(57,255,20,0.9),
+        0 0 12px rgba(57,255,20,0.7),
+        0 0 20px rgba(57,255,20,0.5)
+      `,
+      transform: 'translateY(-2px)',
+      pointerEvents: 'auto'
+    });
+
+    box.innerText = 'nuh-uh no inspect element (if this is a false warning ignore this)';
+
+    const hint = document.createElement('div');
+    hint.innerText = 'Click to dismiss';
+    Object.assign(hint.style, {
+      marginTop: '18px',
+      fontSize: 'clamp(12px, 1.6vw, 16px)',
+      fontWeight: '600',
+      opacity: '0.85'
+    });
+
+    const inner = document.createElement('div');
+    inner.style.textAlign = 'center';
+    inner.appendChild(box);
+    inner.appendChild(hint);
+
+    overlay.appendChild(inner);
+    document.documentElement.appendChild(overlay);
+
+    // prevent interaction with the page while overlay present
+    const prevPointer = document.documentElement.style.pointerEvents;
+    document.documentElement.style.pointerEvents = 'none';
+    overlay.style.pointerEvents = 'auto';
+
+    // stop key events from propagating while overlay visible
+    function overlayKeyHandler(e){
+      try { e.preventDefault(); e.stopImmediatePropagation(); } catch(_){}
+    }
+    window.addEventListener('keydown', overlayKeyHandler, {capture:true});
+
+    function dismiss(){
+      try {
+        window.removeEventListener('keydown', overlayKeyHandler, {capture:true});
+      } catch(_) {}
+      try {
+        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      } catch(_) {}
+      document.documentElement.style.pointerEvents = prevPointer || '';
+      active = false;
+      lastAction = now();
+    }
+
+    overlay.addEventListener('click', dismiss, {once:true});
+    overlay.addEventListener('touchstart', dismiss, {once:true});
+  }
+
+  function triggerWarning(){
     if (now() - lastAction < THROTTLE_MS) return;
     lastAction = now();
-    try { location.href = REDIRECT_URL; } catch(e){}
+    try { showNeonMessage(); } catch(_) {}
   }
 
-  // --- Keyboard detection (devtools shortcuts only) ---
-  window.addEventListener('keydown', (e) => {
+  // Key combos considered "open inspect" attempts
+  function isDevShortcut(e){
     try {
       const key = (e.key || '').toString().toUpperCase();
-      const isDevShortcut =
-        key === 'F12' ||
-        (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(key)) ||
-        (e.metaKey && e.altKey && ['I','J','C'].includes(key)) || // mac variant
-        (e.ctrlKey && key === 'U') || // view source (often used to inspect)
-        (e.ctrlKey && e.shiftKey && key === 'P'); // cmd palette in some setups
-      if (isDevShortcut){
-        try { e.preventDefault(); e.stopImmediatePropagation(); } catch(_) {}
-        redirectNow();
-      }
-    } catch(_) {}
-  }, {capture:true});
-
-  // --- Size heuristic (devtools docked) ---
-  function checkBySize(){
-    try {
-      const wDiff = Math.abs(window.outerWidth - window.innerWidth);
-      const hDiff = Math.abs(window.outerHeight - window.innerHeight);
-      // threshold tuned for docked devtools; adjust if needed
-      return (wDiff > 160 || hDiff > 160);
-    } catch(e){ return false; }
+      // include common combos: F12, Ctrl/Cmd+Shift+I/J/C, Ctrl+U, Ctrl+Shift+P
+      if (key === 'F12') return true;
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I','J','C','P'].includes(key)) return true;
+      if ((e.ctrlKey || e.metaKey) && key === 'U') return true;
+      return false;
+    } catch(_) { return false; }
   }
 
-  // --- Console getter trick ---
-  function checkByConsoleGetter(){
-    try {
-      let triggered = false;
-      const sentinel = new Image();
-      Object.defineProperty(sentinel, 'id', {
-        get: function(){
-          triggered = true;
-          return 'dev-sentinel';
-        }
-      });
-      // logging in many consoles will expand the object and call the getter
-      console.log('%c', sentinel);
-      return triggered;
-    } catch(e){ return false; }
-  }
-
-  // --- Debugger timing trick ---
-  function checkByDebuggerPulse(){
-    try {
-      const t0 = performance.now();
-      // eslint-disable-next-line no-debugger
-      debugger;
-      const t1 = performance.now();
-      return (t1 - t0) > 80; // if paused by devtools, gap is large
-    } catch(e){ return false; }
-  }
-
-  // --- Full check (periodic) ---
-  function fullCheck(){
-    try {
-      if (checkBySize() || checkByConsoleGetter() || checkByDebuggerPulse()){
-        redirectNow();
-      }
-    } catch(e){}
-  }
-
-  // periodic checks (won't react to clicks)
-  const intervalId = setInterval(fullCheck, 700);
-
-  // also check on resize/visibilitychange/blur (these are common when devtools open)
-  window.addEventListener('resize', () => setTimeout(fullCheck, 120), {capture:true});
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') {
-      // sometimes devtools steals focus / changes visibility; treat as indicator
-      redirectNow();
-    } else {
-      setTimeout(fullCheck, 120);
+  // Only keyboard detection now. Ignore repeats so holding a key won't spam.
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return; // ignore repeated keydown events
+    if (active) return;  // already showing
+    if (isDevShortcut(e)){
+      try { e.preventDefault(); e.stopImmediatePropagation(); } catch(_) {}
+      triggerWarning();
     }
   }, {capture:true});
-  window.addEventListener('blur', () => {
-    // devtools often steals focus; only redirect if a short time gap indicates it's real
-    setTimeout(() => {
-      // run the stronger checks after blur to avoid false positives
-      try { if (checkBySize() || checkByConsoleGetter()) redirectNow(); } catch(_) {}
-    }, 120);
-  }, {capture:true});
 
-
+  // Clean up on unload
+  window.addEventListener('beforeunload', function(){
+    try { /* nothing to clear */ } catch(_) {}
+  });
 })();
+
+
 
 
 
 </script>
 </body>
 </html>
-
 
