@@ -191,7 +191,7 @@ input[type=number]{background:transparent;border:1px solid rgba(255,255,255,0.04
 .kf-leaderboard-hero{
   display:flex;align-items:center;gap:14px;justify-content:space-between;padding:12px 8px 6px;border-bottom:1px solid rgba(255,255,255,0.03);
 }
-.kf-leaderboard-hero h2{margin:0;font-size:32px;letter-spacing:2px;font-weight:900;color:#fff;text-align:center}
+.kf-leaderboard-hero h2{Margin:0;font-size:32px;letter-spacing:2px;font-weight:900;color:#fff;text-align:center}
 .kf-leaderboard-hero .muted{color:var(--muted);font-size:13px}
 
 /* Table like the image */
@@ -2448,6 +2448,78 @@ document.addEventListener('DOMContentLoaded', function(){
   // Expose small helper for other UI (if other scripts call it)
   window.__kf_showLeaderboard = () => showLbModal(true);
 });
+</script>
+
+<!-- ============= RAINBET BUTTON: Wiring only ============= -->
+<script>
+/*
+  ONLY wiring and behavior for the Rainbet button.
+  - Opens the existing #rainbetModal (display:flex + .active) when #rainbetBtn clicked.
+  - Closes modal when "Got it" (#rainCloseBtn) clicked, when overlay clicked outside modal, or ESC pressed.
+  - Triggers a small burstAt visual on the board area when opened (non-blocking).
+  This script intentionally edits only rainbet behavior and nothing else.
+*/
+(function(){
+  try{
+    const rainbetBtn = document.getElementById('rainbetBtn');
+    const rainbetModal = document.getElementById('rainbetModal');
+    const rainCloseBtn = document.getElementById('rainCloseBtn');
+
+    if(!rainbetBtn || !rainbetModal) return;
+
+    function openRain(){
+      try{
+        rainbetModal.style.display = 'flex';
+        rainbetModal.classList.add('active');
+        rainbetModal.setAttribute('aria-hidden','false');
+        // small burst visual in the board center to emphasize opening
+        try{
+          const boardRect = (document.getElementById('board') || document.body).getBoundingClientRect();
+          // burstAt expects coords relative to particlesRoot, which is positioned inside board area.
+          // we use board's center to create a pleasing burst.
+          const x = Math.max(20, Math.round(boardRect.width/2));
+          const y = Math.max(20, Math.round(boardRect.height/2));
+          // call burstAt if available
+          if(typeof burstAt === 'function'){
+            burstAt(x, y, 'rgba(12,240,74,0.95)');
+            // add a second gold burst for emphasis
+            setTimeout(()=> burstAt(x, y, 'rgba(255,215,0,0.95)'), 80);
+          }
+        }catch(_){}
+      }catch(e){ console.warn('openRain error', e); }
+    }
+
+    function closeRain(){
+      try{
+        rainbetModal.classList.remove('active');
+        rainbetModal.style.display = 'none';
+        rainbetModal.setAttribute('aria-hidden','true');
+      }catch(e){ console.warn('closeRain error', e); }
+    }
+
+    rainbetBtn.addEventListener('click', function(e){
+      e && e.preventDefault && e.preventDefault();
+      openRain();
+    });
+
+    if(rainCloseBtn) rainCloseBtn.addEventListener('click', function(e){
+      e && e.preventDefault && e.preventDefault();
+      closeRain();
+    });
+
+    // close when clicking the overlay outside the rain modal
+    rainbetModal.addEventListener('click', function(e){
+      if(e.target === rainbetModal) closeRain();
+    });
+
+    // ESC to close
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && rainbetModal.classList.contains('active')) closeRain();
+    });
+  }catch(e){
+    console.warn('rainbet wiring failed', e);
+  }
+})();
 </script>
 
 </body>
