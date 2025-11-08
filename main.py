@@ -495,6 +495,28 @@ def post_close_month():
         podium = compute_podium_snapshot(db.get("users", {}), top_n=3)
         db.setdefault("monthly_winners", {})[prev_month] = {"podium": podium, "closed_at": _now_iso()}
         db["last_month_closed"] = _get_month_key()
+
+        # === NEW: reset every user's balance to START_BALANCE for new period ===
+        # Also reset period_start_balance, trades, wins, and update last_update.
+        users = db.get("users", {})
+        now_iso = _now_iso()
+        for uid, u in users.items():
+            try:
+                u["balance"] = round(float(START_BALANCE), 2)
+            except Exception:
+                u["balance"] = round(START_BALANCE, 2)
+            # reset period start balance for next period
+            try:
+                u["period_start_balance"] = round(float(START_BALANCE), 2)
+            except Exception:
+                u["period_start_balance"] = round(START_BALANCE, 2)
+            # reset counters for the new month
+            u["trades"] = 0
+            u["wins"] = 0
+            # stamp last_update so clients know it was updated
+            u["last_update"] = now_iso
+        # ===================================================================
+
         _write_db(db)
     return {"status": "closed", "month": prev_month, "podium": podium}
 
