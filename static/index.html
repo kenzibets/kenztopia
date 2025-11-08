@@ -616,6 +616,35 @@ input[type=number]{background:transparent;border:1px solid rgba(255,255,255,0.04
 */
 
 /* ---------------------------
+   USER ID helpers (canonicalization & validation)
+   --------------------------- */
+// place these helpers near the top so all scripts can use them
+function canonicalizeUserId(uid){
+  if(!uid) return '';
+  return String(uid).trim().toLowerCase();
+}
+const USERID_RE = /^[a-z0-9\-_]{3,64}$/;
+function isValidUserId(uid){
+  return USERID_RE.test(canonicalizeUserId(uid));
+}
+function ensureLocalUserId(){
+  try{
+    let uid = localStorage.getItem('kf_user_id') || '';
+    uid = canonicalizeUserId(uid);
+    if(!isValidUserId(uid)){
+      uid = 'u-' + Math.random().toString(36).slice(2,12);
+      uid = canonicalizeUserId(uid);
+    }
+    localStorage.setItem('kf_user_id', uid);
+    return uid;
+  }catch(e){
+    // fallback - generate but do not persist
+    return canonicalizeUserId('u-' + Math.random().toString(36).slice(2,12));
+  }
+}
+// ---------------------------
+
+/* ---------------------------
    NEW: Number abbreviation helpers
    --------------------------- */
 
@@ -1360,7 +1389,7 @@ async function doSpin(){
 
   // update live-wins UI and post to server (non-blocking)
   try {
-    const localUid = localStorage.getItem('kf_user_id') || ('u-' + Math.random().toString(36).slice(2,12));
+    const localUid = ensureLocalUserId();
     const localNick = (localStorage.getItem('kf_nickname') || '').slice(0,40);
     const result = resp.win_amount > 0 ? 'win' : 'lose';
     const amtForServer = resp.win_amount > 0 ? resp.win_amount : bet;
@@ -1377,7 +1406,7 @@ async function doSpin(){
         await fetch(`/api/user/${encodeURIComponent(localUid)}/trade`, {
           method: 'POST',
           headers: {'content-type': 'application/json'},
-          body: JSON.stringify({ result: result, amount: amtForServer })
+          body: JSON.stringify({ result: result, amount: amtForServer, nickname: (localNick || undefined) })
         });
       }catch(e){}
     })();
@@ -1414,12 +1443,8 @@ maxBtn.addEventListener('click', ()=> {
 
 /* ---------- SELL FEET PICS feature ---------- */
 function _getUserIdForSell(){
-  let uid = localStorage.getItem('kf_user_id');
-  if(!uid){
-    uid = 'u-' + Math.random().toString(36).slice(2,12);
-    localStorage.setItem('kf_user_id', uid);
-  }
-  return uid;
+  // unified: always use canonical local id
+  return ensureLocalUserId();
 }
 function _getSellKey(uid){ return `sellFeet_timestamps_${uid}`; }
 function _readSellTimestamps(uid){
@@ -2082,7 +2107,7 @@ async function sendTradeToServer(userId, result, amount){
 }
 
 /* ---------------------------
-   LEADERBOARD modal + nickname prompt
+   LEADERBOARD modal + NICKNAME PROMPT
    - When saving a nickname, display: "Nickname set to {nick}"
    - Never display user_id as nickname (use "Anon" if none)
 --------------------------- */
@@ -2115,7 +2140,7 @@ async function sendTradeToServer(userId, result, amount){
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div class="muted">Top 100 balances</div>
           <div style="display:flex;gap:8px">
-            <input id="kf-nickname-main" type="text" placeholder="Enter nickname (max 40)" style="padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">
+            <input id="kf-nickname-main" maxlength="40" type="text" placeholder="Enter nickname (max 40)" style="padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">
             <button id="kf-save-nick-main" class="btn" type="button">Save Nick</button>
             <button id="kf-refresh-main" class="small" type="button">Refresh</button>
           </div>
@@ -2157,7 +2182,7 @@ async function sendTradeToServer(userId, result, amount){
     <h3 id="kf-nick-title" style="color:var(--accent-green);margin:0 0 8px 0">Pick a nickname</h3>
     <p class="muted" style="margin:0 0 12px 0">This will be shown on the leaderboard. You will only be asked once.</p>
     <div style="display:flex;gap:8px">
-      <input id="kf-nick-input" type="text" placeholder="Nickname" style="flex:1;padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">
+      <input id="kf-nick-input" maxlength="40" type="text" placeholder="Nickname" style="flex:1;padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">
       <button id="kf-nick-save" class="btn" type="button">Save</button>
     </div>
     <div style="margin-top:12px"><button id="kf-nick-skip" class="small" type="button">Skip (ask me later)</button></div>
@@ -2194,11 +2219,7 @@ document.addEventListener('DOMContentLoaded', function(){
   const nickModalSkip = document.getElementById('kf-nick-skip');
 
   // identity
-  let userId = localStorage.getItem('kf_user_id');
-  if(!userId){
-    userId = 'u-' + Math.random().toString(36).slice(2,12);
-    localStorage.setItem('kf_user_id', userId);
-  }
+  let userId = ensureLocalUserId();
   userIdEl.textContent = userId;
 
   let nickname = (localStorage.getItem('kf_nickname') || '').slice(0,MAX_NICK_LEN);
@@ -2339,12 +2360,32 @@ document.addEventListener('DOMContentLoaded', function(){
     lastSyncMain.textContent = new Date().toLocaleTimeString();
   }
 
+  // Replace saveUserState with canonicalized ID and improved feedback
   async function saveUserState(nick, bal){
     const payload = {};
     if(nick !== undefined) payload.nickname = (nick||'').slice(0,MAX_NICK_LEN);
     if(bal !== undefined) payload.balance = Number(bal);
-    const res = await apiPost(`/user/${encodeURIComponent(userId)}`, payload);
-    return res;
+
+    const uid = ensureLocalUserId();
+    try{
+      const res = await fetch(`${API_BASE}/user/${encodeURIComponent(uid)}`, {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json().catch(()=>null);
+      if(!res.ok){
+        const msg = (json && (json.detail || json.message)) || `Server error ${res.status}`;
+        showToast(`Failed to save: ${msg}`);
+        return null;
+      }
+      if(json && json.status === 'created') showToast('Account created');
+      else showToast('Saved');
+      return json;
+    }catch(e){
+      showToast('Network error saving user');
+      return null;
+    }
   }
 
   // Wrap setBalance to save on server & localStorage (non-blocking)
