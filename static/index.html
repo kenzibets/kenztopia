@@ -2217,6 +2217,9 @@ window.addEventListener('keydown', (e) => {
 */
 
 
+/* Full case-modal IIFE (complete) — paste this whole block to replace your existing case-modal IIFE.
+   It includes meme-mode autoload, carousel, single/multi open, and the full battle simulation.
+*/
 (function(){
   const caseBtn = document.getElementById('caseBtn');
   if(!caseBtn) return;
@@ -2248,6 +2251,7 @@ window.addEventListener('keydown', (e) => {
     caseModeFlag.textContent = caseMode === 'monster' ? 'Mode: Monster' : 'Mode: Meme';
     caseBetDisplay.textContent = formatCurrency(Number(caseBetInput.value || 1));
     caseInfo.textContent = caseMode === 'meme' ? 'Memes mode uses your meme images + meme audios.' : 'Monster case uses standard symbols.';
+    if(caseToggleMode) caseToggleMode.textContent = caseMode === 'meme' ? 'Switch to Monster Case' : 'Toggle Meme Case';
   }
 
   // Reuse pool functions (same logic as before)
@@ -2298,6 +2302,7 @@ window.addEventListener('keydown', (e) => {
       div.innerHTML = `<img src="${it.img}" alt="${it.name}"><div class="name">${it.name}</div>`;
       caseCarousel.appendChild(div);
     }
+    caseCarousel.style.transform = 'translateX(0)';
     return { sequenceLength: seq.length, chosenDomIndex: insertAt };
   }
 
@@ -2344,9 +2349,8 @@ window.addEventListener('keydown', (e) => {
         const pick = sfxLose[Math.floor(Math.random()*sfxLose.length)];
         new Audio(pick.url).play().catch(()=>{});
       } else {
-        // small click as fallback
         const a = new Audio();
-        a.src = 'data:audio/mp3;base64,//uQx'; // silence tiny data URI as fallback (no-op)
+        a.src = 'data:audio/mp3;base64,//uQx';
       }
     } catch(e){}
   }
@@ -2356,7 +2360,7 @@ window.addEventListener('keydown', (e) => {
         const pick = sfxWins[Math.floor(Math.random()*sfxWins.length)];
         new Audio(pick.url).play().catch(()=>{});
       } else {
-        playRandomWinSfx(); // will only play if memesMode true
+        playRandomWinSfx();
       }
     } catch(e){}
   }
@@ -2374,6 +2378,12 @@ window.addEventListener('keydown', (e) => {
     }
 
     updateCaseUI();
+
+    // Ensure meme assets are loaded when in meme mode
+    if(caseMode === 'meme' && (!Array.isArray(memeImages) || memeImages.length === 0)){
+      try { await autoloadFromGitHub(); } catch(e){ console.warn('autoload memes failed', e); }
+    }
+
     const pool = buildCasePool();
     const chosenPoolIndex = pickPrizeIndex(pool);
     const meta = populateCarousel(pool, chosenPoolIndex);
@@ -2433,206 +2443,204 @@ window.addEventListener('keydown', (e) => {
   }
 
   // ---- Battle: 1 user vs 4 bots ----
-  // simple bot list
   const BOT_NAMES = ['Rudy','Alex','Ruth','Kenzie'];
   function makeBotAvatar(name){
-    // create a simple placeholder avatar (initials with color)
     const initials = name.slice(0,2).toUpperCase();
     return `<div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.06));display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--muted);margin-right:8px">${initials}</div>`;
   }
 
-    function renderBattlePlayers(pairs){
-        // pairs: array of { id:'user'|'bot', name, chosenName, value, previewImg, idx }
-        const bp = document.getElementById('battlePlayers') || battlePlayers;
-        if(!bp) return;
-        bp.innerHTML = '';
-        pairs.forEach(function(p, i){
-            const wrap = document.createElement('div');
-            wrap.className = 'battle-card';
-            wrap.innerHTML = `
-                <div>
-                    <div class="preview" aria-hidden="false">
-                        <img src="${p.previewImg || ''}" alt="${(p.chosenName || '').replace(/"/g,'&quot;')}">
-                    </div>
-                    <div class="meta">
-                        <div class="item-name">${p.chosenName || '—'}</div>
-                        <div class="item-value" data-value>${p.value ? formatCurrency(p.value) : '—'}</div>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-                    <div style="display:flex;align-items:center;gap:10px">
-                        <div class="player-avatar" aria-hidden="true">${((p.name||'') + '').slice(0,2).toUpperCase()}</div>
-                        <div style="display:flex;flex-direction:column;min-width:0">
-                            <div class="player-name">${p.name}${p.id==='user' ? ' (you)' : ''}</div>
-                            <div style="font-size:12px;color:var(--muted)">${p.id==='bot' ? 'BOT' : 'PLAYER'}</div>
-                        </div>
-                    </div>
-                    <div style="font-weight:900;color:var(--muted);font-size:12px">#${(p.idx != null) ? p.idx : (i+1)}</div>
-                </div>
-            `;
-            bp.appendChild(wrap);
-        });
-    }
+  function renderBattlePlayers(pairs){
+    const bp = document.getElementById('battlePlayers') || battlePlayers;
+    if(!bp) return;
+    bp.innerHTML = '';
+    pairs.forEach(function(p, i){
+      const wrap = document.createElement('div');
+      wrap.className = 'battle-card';
+      wrap.innerHTML = `
+          <div>
+              <div class="preview" aria-hidden="false">
+                  <img src="${p.previewImg || ''}" alt="${(p.chosenName || '').replace(/"/g,'&quot;')}">
+              </div>
+              <div class="meta">
+                  <div class="item-name">${p.chosenName || '—'}</div>
+                  <div class="item-value" data-value>${p.value ? formatCurrency(p.value) : '—'}</div>
+              </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+              <div style="display:flex;align-items:center;gap:10px">
+                  <div class="player-avatar" aria-hidden="true">${((p.name||'') + '').slice(0,2).toUpperCase()}</div>
+                  <div style="display:flex;flex-direction:column;min-width:0">
+                      <div class="player-name">${p.name}${p.id==='user' ? ' (you)' : ''}</div>
+                      <div style="font-size:12px;color:var(--muted)">${p.id==='bot' ? 'BOT' : 'PLAYER'}</div>
+                  </div>
+              </div>
+              <div style="font-weight:900;color:var(--muted);font-size:12px">#${(p.idx != null) ? p.idx : (i+1)}</div>
+          </div>
+      `;
+      bp.appendChild(wrap);
+    });
+  }
 
-    function weightedPick(arr, weightFn){
-        if(!Array.isArray(arr) || arr.length === 0) return null;
-        const weights = arr.map(function(x, i){ try{ return Math.max(0, Number(weightFn(x, i) || 0)); }catch(e){ return 0; } });
-        const total = weights.reduce(function(a,b){ return a + b; }, 0);
-        if(total <= 0) return arr[Math.floor(Math.random()*arr.length)];
-        let r = Math.random() * total;
-        for(let i = 0; i < arr.length; i++){
-            r -= weights[i];
-            if(r <= 0) return arr[i];
+  function weightedPick(arr, weightFn){
+    if(!Array.isArray(arr) || arr.length === 0) return null;
+    const weights = arr.map(function(x, i){ try{ return Math.max(0, Number(weightFn(x, i) || 0)); }catch(e){ return 0; } });
+    const total = weights.reduce(function(a,b){ return a + b; }, 0);
+    if(total <= 0) return arr[Math.floor(Math.random()*arr.length)];
+    let r = Math.random() * total;
+    for(let i = 0; i < arr.length; i++){
+      r -= weights[i];
+      if(r <= 0) return arr[i];
+    }
+    return arr[arr.length - 1];
+  }
+
+  async function simulateBattle(){
+    if(typeof opening !== 'undefined' && opening) return;
+    try{
+      opening = true;
+    }catch(e){ window.opening = true; }
+    try{
+      if(caseOpenBtn) caseOpenBtn.disabled = true;
+      if(caseOpenX5Btn) caseOpenX5Btn.disabled = true;
+      if(caseBattleBtn) caseBattleBtn.disabled = true;
+      if(caseBattlePanel) caseBattlePanel.style.display = 'block';
+      if(battleStatus) battleStatus.textContent = 'Running...';
+
+      const bet = Math.max(1, Number((caseBetInput && caseBetInput.value) || 1));
+      if(bet > (window.balance || 0)){
+        showToast && showToast('Not enough balance for battle');
+        opening = false;
+        if(caseOpenBtn) caseOpenBtn.disabled = false;
+        if(caseOpenX5Btn) caseOpenX5Btn.disabled = false;
+        if(caseBattleBtn) caseBattleBtn.disabled = false;
+        if(battleStatus) battleStatus.textContent = 'Idle';
+        return;
+      }
+
+      // charge bet up-front
+      setBalance && setBalance((window.balance || 0) - bet);
+
+      const pool = (typeof buildCasePool === 'function') ? buildCasePool() : [];
+      // players: user + 4 bots
+      const players = [{ id:'user', name: (localStorage.getItem('kf_nickname') || 'You'), chosenName:null, value:0, previewImg:null, effective:0 }];
+      const BOT_NAMES = ['Rook','Fiz','Nova','Hexa'];
+      for(let i=0;i<4;i++) players.push({ id:'bot', name: BOT_NAMES[i] || ('Bot'+(i+1)), chosenName:null, value:0, previewImg:null, effective:0 });
+
+      // initial blank render
+      renderBattlePlayers(players);
+
+      // sequential openings
+      for(let i=0;i<players.length;i++){
+        const ply = players[i];
+        if(battleStatus) battleStatus.textContent = `Opening for ${ply.name}...`;
+
+        // pick prize index from pool (uses external helper pickPrizeIndex)
+        const chosenIdx = (typeof pickPrizeIndex === 'function') ? pickPrizeIndex(pool) : Math.floor(Math.random() * Math.max(1, pool.length));
+        const meta = (typeof populateCarousel === 'function') ? populateCarousel(pool, chosenIdx) : { chosenDomIndex: 0, sequenceLength: 10 };
+        await new Promise(r=>setTimeout(r, 80));
+        if(typeof playCaseSpinSound === 'function') playCaseSpinSound();
+        if(typeof animateCarouselToIndex === 'function'){
+          await animateCarouselToIndex(meta.chosenDomIndex, meta.sequenceLength);
+        } else {
+          await new Promise(r=>setTimeout(r, 300 + Math.random()*400));
         }
-        return arr[arr.length - 1];
-    }
+        if(typeof revealPrize === 'function') revealPrize(meta.chosenDomIndex);
+        const chosen = pool[chosenIdx] || { name: 'Unknown', mult3:6, rarity: 10, img: '' };
 
-    async function simulateBattle(){
-        if(typeof opening !== 'undefined' && opening) return;
-        try{
-            opening = true;
-        }catch(e){ window.opening = true; }
-        try{
-            if(caseOpenBtn) caseOpenBtn.disabled = true;
-            if(caseOpenX5Btn) caseOpenX5Btn.disabled = true;
-            if(caseBattleBtn) caseBattleBtn.disabled = true;
-            if(caseBattlePanel) caseBattlePanel.style.display = 'block';
-            if(battleStatus) battleStatus.textContent = 'Running...';
-
-            const bet = Math.max(1, Number((caseBetInput && caseBetInput.value) || 1));
-            if(bet > (window.balance || 0)){
-                showToast && showToast('Not enough balance for battle');
-                opening = false;
-                if(caseOpenBtn) caseOpenBtn.disabled = false;
-                if(caseOpenX5Btn) caseOpenX5Btn.disabled = false;
-                if(caseBattleBtn) caseBattleBtn.disabled = false;
-                if(battleStatus) battleStatus.textContent = 'Idle';
-                return;
-            }
-
-            // charge bet up-front
-            setBalance && setBalance((window.balance || 0) - bet);
-
-            const pool = (typeof buildCasePool === 'function') ? buildCasePool() : [];
-            // players: user + 4 bots
-            const players = [{ id:'user', name: (localStorage.getItem('kf_nickname') || 'You'), chosenName:null, value:0, previewImg:null, effective:0 }];
-            const BOT_NAMES = ['Rook','Fiz','Nova','Hexa'];
-            for(let i=0;i<4;i++) players.push({ id:'bot', name: BOT_NAMES[i] || ('Bot'+(i+1)), chosenName:null, value:0, previewImg:null, effective:0 });
-
-            // initial blank render
-            renderBattlePlayers(players);
-
-            // sequential openings
-            for(let i=0;i<players.length;i++){
-                const ply = players[i];
-                if(battleStatus) battleStatus.textContent = `Opening for ${ply.name}...`;
-
-                // pick prize index from pool (uses external helper pickPrizeIndex)
-                const chosenIdx = (typeof pickPrizeIndex === 'function') ? pickPrizeIndex(pool) : Math.floor(Math.random() * Math.max(1, pool.length));
-                const meta = (typeof populateCarousel === 'function') ? populateCarousel(pool, chosenIdx) : { chosenDomIndex: 0, sequenceLength: 10 };
-                await new Promise(r=>setTimeout(r, 80));
-                if(typeof playCaseSpinSound === 'function') playCaseSpinSound();
-                if(typeof animateCarouselToIndex === 'function'){
-                    await animateCarouselToIndex(meta.chosenDomIndex, meta.sequenceLength);
-                } else {
-                    await new Promise(r=>setTimeout(r, 300 + Math.random()*400));
-                }
-                if(typeof revealPrize === 'function') revealPrize(meta.chosenDomIndex);
-                const chosen = pool[chosenIdx] || { name: 'Unknown', mult3:6, rarity: 10, img: '' };
-
-                // compute raw payout
-                let payoutMult = chosen.mult3 || 6;
-                const rarityFactor = Math.max(1, (120 / (chosen.rarity || 1)));
-                payoutMult = Math.round((payoutMult * (1 + (rarityFactor/10) ) + (Math.random()*12)) * 100) / 100;
-                if((chosen.rarity || 99) <= 3){
-                    payoutMult = Math.round((payoutMult * (8 + Math.random()*40)) * 100) / 100;
-                }
-                const rawPayout = Math.round(bet * payoutMult * 100) / 100;
-
-                // bias: user nerf, bots boost
-                let effectiveValue = rawPayout;
-                if(ply.id === 'user'){
-                    const nerf = 0.03 + Math.random()*0.05; // 3% - 8%
-                    effectiveValue = Math.round(rawPayout * nerf * 100) / 100;
-                } else {
-                    const botBoost = 1.3 + Math.random()*1.6; // 1.3x - 2.9x
-                    effectiveValue = Math.round(rawPayout * botBoost * 100) / 100;
-                }
-
-                ply.chosenName = chosen.name || ('Item #' + chosenIdx);
-                ply.value = rawPayout;
-                ply.effective = effectiveValue;
-                ply.previewImg = chosen.img || '';
-
-                renderBattlePlayers(players);
-
-                // brief reveal pause
-                await new Promise(r => setTimeout(r, 650));
-            }
-
-            // choose winner by weighted pick on effective values
-            const totalEffective = players.reduce((s,p)=> s + Math.max(0, p.effective || 0), 0);
-            let winner;
-            if(totalEffective <= 0){
-                let maxVal = Math.max(...players.map(p=>p.value||0));
-                const top = players.filter(p=> (p.value||0) === maxVal);
-                winner = top[Math.floor(Math.random()*top.length)];
-            } else {
-                winner = weightedPick(players, function(p){ return Math.max(0, p.effective || 0); });
-            }
-
-            // pot and rake
-            const pot = players.reduce(function(s,p){ return s + (p.value || 0); }, 0);
-            const rake = Math.round(pot * 0.04 * 100) / 100;
-            const award = Math.round((pot - rake) * 100) / 100;
-
-            if(battleStatus) battleStatus.textContent = `Winner: ${winner.name}${winner.id==='user' ? ' (you) — UNBELIEVABLE!' : ''} • Pot ${formatCurrency(pot)} • Award ${formatCurrency(award)}`;
-
-            if(winner.id === 'user'){
-                setTimeout(function(){
-                    setBalance && setBalance((window.balance || 0) + award);
-                    if(typeof playCaseWinSound === 'function') playCaseWinSound();
-                    if(typeof showWinOverlay === 'function') showWinOverlay(award, 'jackpot', `Battle win — ${winner.chosenName}`);
-                }, 480);
-            } else {
-                setTimeout(function(){
-                    try {
-                        if(typeof caseMode !== 'undefined' && caseMode === 'meme' && Array.isArray(sfxLose) && sfxLose.length){
-                            new Audio(sfxLose[Math.floor(Math.random()*sfxLose.length)].url).play().catch(()=>{});
-                        }
-                    }catch(e){}
-                    if(typeof showWinOverlay === 'function') showWinOverlay(0, 'small', `You lost — ${winner.name} won the pot`);
-                }, 420);
-            }
-
-            // restore UI
-            setTimeout(function(){
-                opening = false;
-                if(caseOpenBtn) caseOpenBtn.disabled = false;
-                if(caseOpenX5Btn) caseOpenX5Btn.disabled = false;
-                if(caseBattleBtn) caseBattleBtn.disabled = false;
-                if(battleStatus) battleStatus.textContent = 'Idle';
-            }, 1400);
-
-        }catch(err){
-            console.error('simulateBattle error', err);
-            opening = false;
-            if(caseOpenBtn) caseOpenBtn.disabled = false;
-            if(caseOpenX5Btn) caseOpenX5Btn.disabled = false;
-            if(caseBattleBtn) caseBattleBtn.disabled = false;
-            if(battleStatus) battleStatus.textContent = 'Idle';
-            showToast && showToast('Battle failed (see console)');
+        // compute raw payout
+        let payoutMult = chosen.mult3 || 6;
+        const rarityFactor = Math.max(1, (120 / (chosen.rarity || 1)));
+        payoutMult = Math.round((payoutMult * (1 + (rarityFactor/10) ) + (Math.random()*12)) * 100) / 100;
+        if((chosen.rarity || 99) <= 3){
+          payoutMult = Math.round((payoutMult * (8 + Math.random()*40)) * 100) / 100;
         }
+        const rawPayout = Math.round(bet * payoutMult * 100) / 100;
+
+        // bias: user nerf, bots boost
+        let effectiveValue = rawPayout;
+        if(ply.id === 'user'){
+          const nerf = 0.03 + Math.random()*0.05; // 3% - 8%
+          effectiveValue = Math.round(rawPayout * nerf * 100) / 100;
+        } else {
+          const botBoost = 1.3 + Math.random()*1.6; // 1.3x - 2.9x
+          effectiveValue = Math.round(rawPayout * botBoost * 100) / 100;
+        }
+
+        ply.chosenName = chosen.name || ('Item #' + chosenIdx);
+        ply.value = rawPayout;
+        ply.effective = effectiveValue;
+        ply.previewImg = chosen.img || '';
+
+        renderBattlePlayers(players);
+
+        // brief reveal pause
+        await new Promise(r => setTimeout(r, 650));
+      }
+
+      // choose winner by weighted pick on effective values
+      const totalEffective = players.reduce((s,p)=> s + Math.max(0, p.effective || 0), 0);
+      let winner;
+      if(totalEffective <= 0){
+        let maxVal = Math.max(...players.map(p=>p.value||0));
+        const top = players.filter(p=> (p.value||0) === maxVal);
+        winner = top[Math.floor(Math.random()*top.length)];
+      } else {
+        winner = weightedPick(players, function(p){ return Math.max(0, p.effective || 0); });
+      }
+
+      // pot and rake
+      const pot = players.reduce(function(s,p){ return s + (p.value || 0); }, 0);
+      const rake = Math.round(pot * 0.04 * 100) / 100;
+      const award = Math.round((pot - rake) * 100) / 100;
+
+      if(battleStatus) battleStatus.textContent = `Winner: ${winner.name}${winner.id==='user' ? ' (you) — UNBELIEVABLE!' : ''} • Pot ${formatCurrency(pot)} • Award ${formatCurrency(award)}`;
+
+      if(winner.id === 'user'){
+        setTimeout(function(){
+          setBalance && setBalance((window.balance || 0) + award);
+          if(typeof playCaseWinSound === 'function') playCaseWinSound();
+          if(typeof showWinOverlay === 'function') showWinOverlay(award, 'jackpot', `Battle win — ${winner.chosenName}`);
+        }, 480);
+      } else {
+        setTimeout(function(){
+          try {
+            if(typeof caseMode !== 'undefined' && caseMode === 'meme' && Array.isArray(sfxLose) && sfxLose.length){
+              new Audio(sfxLose[Math.floor(Math.random()*sfxLose.length)].url).play().catch(()=>{});
+            }
+          }catch(e){}
+          if(typeof showWinOverlay === 'function') showWinOverlay(0, 'small', `You lost — ${winner.name} won the pot`);
+        }, 420);
+      }
+
+      // restore UI
+      setTimeout(function(){
+        opening = false;
+        if(caseOpenBtn) caseOpenBtn.disabled = false;
+        if(caseOpenX5Btn) caseOpenX5Btn.disabled = false;
+        if(caseBattleBtn) caseBattleBtn.disabled = false;
+        if(battleStatus) battleStatus.textContent = 'Idle';
+      }, 1400);
+
+    }catch(err){
+      console.error('simulateBattle error', err);
+      opening = false;
+      if(caseOpenBtn) caseOpenBtn.disabled = false;
+      if(caseOpenX5Btn) caseOpenX5Btn.disabled = false;
+      if(caseBattleBtn) caseBattleBtn.disabled = false;
+      if(battleStatus) battleStatus.textContent = 'Idle';
+      showToast && showToast('Battle failed (see console)');
     }
+  }
 
   // wiring
-  caseBtn.addEventListener('click', (e)=>{
+  caseBtn.addEventListener('click', async (e)=>{
     e && e.preventDefault && e.preventDefault();
+    if(caseMode === 'meme' && (!Array.isArray(memeImages) || memeImages.length === 0)){
+      try{ await autoloadFromGitHub(); }catch(e){ console.warn('autoload on open failed', e); }
+    }
     caseModal.classList.add('active'); caseModal.setAttribute('aria-hidden','false');
-    // ensure modal bet shows main bet by default
     caseBetInput.value = Math.max(1, Number(betInput.value || 10));
     updateCaseUI();
-    // initial small populate
     const pool = buildCasePool();
     populateCarousel(pool, Math.floor(Math.random()*pool.length));
   });
@@ -2645,15 +2653,37 @@ window.addEventListener('keydown', (e) => {
   });
   document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && caseModal.classList.contains('active')) { caseModal.classList.remove('active'); caseModal.setAttribute('aria-hidden','true'); } });
 
-  caseToggleMode.addEventListener('click', ()=>{
+  // NEW: async toggle that loads memes & sfx on-demand and updates UI
+  caseToggleMode.addEventListener('click', async ()=>{
     caseMode = (caseMode === 'monster') ? 'meme' : 'monster';
+    if(caseMode === 'meme'){
+      try{
+        memesMode = true;
+        if(!Array.isArray(memeImages) || memeImages.length === 0){
+          await autoloadFromGitHub();
+        } else {
+          buildMemeSymbols();
+        }
+      }catch(err){
+        console.warn('failed to autoload memes', err);
+      }
+    } else {
+      memesMode = false;
+    }
     updateCaseUI();
+    try{
+      const pool = buildCasePool();
+      populateCarousel(pool, Math.floor(Math.random()*pool.length));
+    }catch(e){ console.warn('repopulate after toggle failed', e); }
   });
 
   caseOpenBtn.addEventListener('click', async ()=> { await openSingleCase_internal(false); });
   caseOpenX5Btn.addEventListener('click', async ()=> { await openMultipleCases(5); });
 
-  caseBattleBtn.addEventListener('click', async ()=> { await simulateBattle(); });
+  caseBattleBtn.addEventListener('click', async ()=> {
+    if(typeof simulateBattle === 'function') await simulateBattle();
+    else console.warn('simulateBattle not defined in this scope');
+  });
 
   // update UI when modal bet changes
   caseBetInput.addEventListener('input', updateCaseUI);
@@ -2661,6 +2691,9 @@ window.addEventListener('keydown', (e) => {
   // expose debug
   window.__kf_case_open_single = openSingleCase_internal;
 })();
+
+
+
 /* ---------------------------
    Initializations
    --------------------------- */
