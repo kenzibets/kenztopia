@@ -2220,6 +2220,11 @@ window.addEventListener('keydown', (e) => {
 /* Full case-modal IIFE (complete) — paste this whole block to replace your existing case-modal IIFE.
    It includes meme-mode autoload, carousel, single/multi open, and the full battle simulation.
 */
+/* Full case-modal IIFE (complete) — updated so regular "monster" case openings lose more often than they win.
+   Paste this whole block to replace your existing case-modal IIFE.
+   Key change: inside openSingleCase_internal() there's now an extra win-probability gate for 'monster' mode
+   which makes most drops pay out $0 (loss) unless a random roll passes a relatively low threshold.
+*/
 (function(){
   const caseBtn = document.getElementById('caseBtn');
   if(!caseBtn) return;
@@ -2401,7 +2406,39 @@ window.addEventListener('keydown', (e) => {
     const rarityFactor = Math.max(1, (120 / (chosen.rarity || 1)));
     payoutMult = Math.round((payoutMult * (1 + (rarityFactor/10) ) + (Math.random()*12)) * 100) / 100;
     if(chosen.rarity <= 3) payoutMult = Math.round((payoutMult * (8 + Math.random()*40)) * 100) / 100;
-    const payout = Math.round(bet * payoutMult * 100) / 100;
+    let payout = Math.round(bet * payoutMult * 100) / 100;
+
+    /* ---------- NEW: force MONSTER case to lose more often ----------
+       For caseMode === 'monster' we apply a "win gate" probability so that
+       most drops result in payout = 0 (loss). Rare items get a higher chance
+       to pay out; common items mostly result in no payout.
+       This preserves the visual 'drop' but makes wins less frequent.
+    */
+    if(caseMode === 'monster'){
+      // base win probability for a normal/common drop
+      let baseWinProb = 0.16; // ~16% chance to actually pay out
+      // bump probability for rare items (rarity small -> rarer)
+      if(chosen.rarity <= 3) baseWinProb = 0.55;    // rare special items ~55% chance
+      else if(chosen.rarity <= 8) baseWinProb = 0.28; // uncommon ~28%
+      else if(chosen.mult3 >= 12) baseWinProb = 0.22; // slightly better if mult3 high
+      // Further reduce overall payout size when wins occur (house edge)
+      const roll = Math.random();
+      if(roll > baseWinProb){
+        // treat as a loss: zero payout
+        payout = 0;
+      } else {
+        // it's a 'win' — but apply a dampening factor to keep wins modest
+        // Rare items keep more (bigger fraction), commons get heavily reduced
+        let keepFactor = 0.55 + Math.random()*0.35; // 0.55–0.9
+        if(chosen.rarity > 20) keepFactor = 0.45 + Math.random()*0.3; // common: 0.45–0.75
+        if(chosen.rarity > 60) keepFactor = 0.30 + Math.random()*0.25; // very common: 0.30–0.55
+        // For safety clamp
+        keepFactor = Math.max(0.2, Math.min(0.95, keepFactor));
+        payout = Math.round(payout * keepFactor * 100) / 100;
+        // Occasionally (small chance) reduce even further to create many tiny wins
+        if(Math.random() < 0.12) payout = Math.round(payout * (0.18 + Math.random()*0.42) * 100) / 100;
+      }
+    }
 
     // Visual & audio
     try { cameraShake(chosen.rarity <= 3 ? 12 : 6); } catch(e){}
@@ -2421,7 +2458,7 @@ window.addEventListener('keydown', (e) => {
       }, 420);
     }
 
-    // update result area inside modal
+    // update result area inside modal (show 0.00 for losses)
     caseResult.innerHTML = `Bet: <strong id="caseBetDisplay">${formatCurrency(bet)}</strong> • Drop: <strong style="color:var(--accent-green)">${chosen.name}</strong> • Value: <strong>${formatCurrency(payout)}</strong>`;
 
     // re-enable
