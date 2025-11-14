@@ -2247,66 +2247,95 @@ sellFeetBtn.addEventListener('click', async ()=>{
   }catch(e){ console.warn('sellFeet init failed', e); }
 })();
 
-/* ---------- Memes & SFX autoload from GitHub ---------- */
+
+/* ---- Direct lists of meme image URLs (no GitHub API) ---- */
+const MEME_URLS = [
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/batman.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/boring.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/bruh.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/emo.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/flip%20off.gif",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/forehead.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/hmm.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/more%20sad.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/patrick.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/sad.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/scared.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/scaredd.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/shocked.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/what.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/krab.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/spongebob.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/squid.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/rahh.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/romeo%26juliet.png"
+];
+
+/* ---- Direct lists of SFX URLs (wins / lose) ---- */
+const SFX_WINS_URLS = [
+  "https://github.com/kenzibets/kenztopia/raw/main/static/audios/wins/clip_01K9DKZB4TZ5EJEWM8V27ZKW89%20(online-video-cutter.com)%20(1).mp4",
+  "https://github.com/kenzibets/kenztopia/raw/main/static/audios/wins/clip_01K9DKZB4TZ5EJEWM8V27ZKW89%20(online-video-cutter.com)%20(2).mp4"
+];
+
+const SFX_LOSE_URLS = [
+  "https://github.com/kenzibets/kenztopia/raw/main/static/audios/lose/clip_01K9DJMH5B7CT8WHZS8SJAYNH9%20(online-video-cutter.com).mp4",
+  "https://github.com/kenzibets/kenztopia/raw/main/static/audios/lose/clip_01K9DKZB4TZ5EJEWM8V27ZKW89%20(online-video-cutter.com).mp4"
+];
+
+/* ---- Stub (not used) for any code that expected fetchGitHubDir; kept to avoid errors */
 async function fetchGitHubDir(dir){
-  const url = `${GITHUB_API_BASE}/${dir}`;
-  try {
-    const r = await fetch(url);
-    if(!r.ok) return [];
-    const json = await r.json();
-    return json.filter(x=>x && x.type === 'file').map(f=>({ name: f.name, url: f.download_url }));
-  } catch(e){
-    return [];
-  }
+  // This project now uses hardcoded URL lists; nothing to fetch from GitHub API.
+  return [];
 }
 
-function buildMemeSymbols(){
-  memeSymbols = memeImages.map((m, idx) => {
-    const n = Math.max(1, memeImages.length);
-    const base = Math.round(Math.max(6, 60 - idx * (50 / n)));
-    const mult3 = base;
-    const mult2 = Math.max(1.1, Math.round((mult3 / 10) * 10) / 10);
-    return {
-      id: idx,
-      name: m.displayName,
-      winName: m.displayName,
-      img: m.url,
-      mult3: mult3,
-      mult2: mult2
-    };
-  });
-}
-
+/* ---- autoloadFromGitHub replacement (keeps the name so other code works unchanged) ---- */
 async function autoloadFromGitHub(){
-  const memes = await fetchGitHubDir(MEMES_DIR);
-  memeImages = memes.filter(f=>/\.(png|jpe?g|gif|webp)$/i.test(f.name)).map(f=>{
-    const displayName = f.name.replace(/\.[^/.]+$/, '').replace(/[-_]+/g,' ').trim();
-    return { name: f.name, displayName, url: f.url };
+  // build memeImages array (same shape used elsewhere)
+  memeImages = MEME_URLS.map(u => {
+    const rawName = u.split('/').pop() || u;
+    const name = decodeURIComponent(rawName);
+    const displayName = name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g,' ').replace(/%20/g,' ').trim();
+    return { name, displayName, url: u };
   });
 
-  const wins = await fetchGitHubDir(AUDIO_WINS_DIR);
-  const lose = await fetchGitHubDir(AUDIO_LOSE_DIR);
-  const audioFilter = (f) => /\.(mp3|m4a|mp4|wav|ogg|webm)$/i.test(f.name);
-  sfxWins = wins.filter(audioFilter).map(f=>({ name: f.name, url: f.url }));
-  sfxLose = lose.filter(audioFilter).map(f=>({ name: f.name, url: f.url }));
+  // build sfx arrays (objects with name/url)
+  sfxWins = SFX_WINS_URLS.map(u => {
+    const raw = u.split('/').pop() || u;
+    return { name: decodeURIComponent(raw), url: u };
+  });
+  sfxLose = SFX_LOSE_URLS.map(u => {
+    const raw = u.split('/').pop() || u;
+    return { name: decodeURIComponent(raw), url: u };
+  });
 
+  // derive memeSymbols (keeps same behavior as previous buildMemeSymbols usage)
   buildMemeSymbols();
 
-  if(memesMode && memeImages.length){
-    for(let c=0;c<COLUMNS;c++){
-      const colEl = document.getElementById(`col-${c}`);
-      const imgs = colEl.querySelectorAll('.cell img');
-      const names = colEl.querySelectorAll('.cell .name');
-      for(let r=0;r<ROWS;r++){
-        const pick = memeImages[(c + r) % memeImages.length];
-        imgs[r].src = pick.url;
-        names[r].textContent = pick.displayName;
+  // If memesMode is active, populate visible board cells quickly (same approach as previous autoload)
+  try {
+    if(memesMode && memeImages.length){
+      for(let c=0;c<COLUMNS;c++){
+        const colEl = document.getElementById(`col-${c}`);
+        if(!colEl) continue;
+        const imgs = colEl.querySelectorAll('.cell img');
+        const names = colEl.querySelectorAll('.cell .name');
+        for(let r=0;r<ROWS;r++){
+          const pick = memeImages[(c + r) % memeImages.length];
+          if(imgs[r]) imgs[r].src = pick.url;
+          if(names[r]) names[r].textContent = pick.displayName;
+        }
       }
     }
+  } catch(e){
+    console.warn('populate after autoload failed', e);
   }
 
+  // update payout board UI
   populatePayoutBoard();
+
+  return Promise.resolve();
 }
+
 
 
 /* ---------- Memes Mode toggle (no color changes) ---------- */
