@@ -2255,7 +2255,7 @@ const MEME_URLS = [
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/bruh.png",
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/emo.png",
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/flip%20off.gif",
-  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/forehead.png",
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/forhead.png",
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/hmm.png",
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/more%20sad.png",
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/patrick.png",
@@ -2267,8 +2267,7 @@ const MEME_URLS = [
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/krab.png",
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/spongebob.png",
   "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/squid.png",
-  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/rahh.png",
-  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/romeo%26juliet.png"
+  "https://raw.githubusercontent.com/kenzibets/kenztopia/main/static/memes/rahh.png"
 ];
 
 /* ---- Direct lists of SFX URLs (wins / lose) ---- */
@@ -2335,7 +2334,30 @@ async function autoloadFromGitHub(){
 
   return Promise.resolve();
 }
+function buildMemeSymbols(){
+  // Defensive: ensure memeImages is an array
+  memeSymbols = Array.isArray(memeImages) ? memeImages.map((m, i) => {
+    // Determine multipliers reasonably so meme cases / spins behave sensibly:
+    // commons -> low multipliers, later entries slightly rarer/higher.
+    const idxBucket = Math.floor(i / 4); // simple bucket for variety
+    const base = 6 + (idxBucket * 2); // base increases a bit with bucket
+    // add small variety per-item
+    const variance = (i % 3) * 1.25;
+    const mult3 = Math.round((Math.max(4, base + variance)) * 10) / 10;
+    const mult2 = Math.max(1, Math.round((mult3 / 3) * 10) / 10);
+    return {
+      id: i,
+      img: m.url || m.img || '',
+      name: m.name || m.displayName || `Meme ${i}`,
+      winName: m.displayName || m.name || `Meme ${i}`,
+      mult3: mult3,
+      mult2: mult2
+    };
+  }) : [];
 
+  // ensure stable numeric ids
+  memeSymbols.forEach((s, idx) => s.id = idx);
+}
 
 
 /* ---------- Memes Mode toggle (no color changes) ---------- */
